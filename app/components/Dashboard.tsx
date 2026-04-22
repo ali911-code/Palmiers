@@ -435,7 +435,7 @@ function AdminView() {
             actions={[
               { label: "Annonce générale", emoji: "📣", accent: "from-rose-500 to-orange-500", onClick: () => setComposing(true) },
               { label: "Gérer les classes", emoji: "🏫", accent: "from-indigo-500 to-fuchsia-500", href: "/admin/classes" },
-              { label: "Gérer les utilisateurs", emoji: "👥", accent: "from-cyan-500 to-blue-500" },
+              { label: "Gérer les utilisateurs", emoji: "👥", accent: "from-cyan-500 to-blue-500", href: "/admin/users" },
             ]}
           />
           <AnnouncementsPanel items={announcements.slice(0, 4)} compact />
