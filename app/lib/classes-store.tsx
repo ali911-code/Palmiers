@@ -10,16 +10,7 @@ import {
 } from "react";
 import { supabase, timeAgo } from "./supabase";
 import {
-  CLASSES_SEED,
-  COURSES_SEED,
-  STUDENTS_SEED,
-  GRADES_SEED,
-  ANNOUNCEMENTS_SEED,
-  ASSIGNMENTS_SEED,
-  STREAM_SEED,
   TEACHERS_SEED,
-  buildCoursesForClasse,
-  buildStudentsForClasse,
   type Announcement,
   type Assignment,
   type Classe,
@@ -133,6 +124,41 @@ function dbToAssignment(r: any): Assignment {
     done: r.done,
   };
 }
+export type ScheduleSlot = {
+  id: string;
+  classeId: string;
+  dayOfWeek: number; // 0=Lundi, 1=Mardi, ..., 5=Samedi
+  startTime: string; // "08:00"
+  endTime: string;   // "09:00"
+  subject: string;
+  teacher: string;
+  room: string;
+};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function dbToScheduleSlot(r: any): ScheduleSlot {
+  return {
+    id: r.id,
+    classeId: r.classe_id,
+    dayOfWeek: r.day_of_week,
+    startTime: r.start_time,
+    endTime: r.end_time,
+    subject: r.subject,
+    teacher: r.teacher ?? "",
+    room: r.room ?? "",
+  };
+}
+function scheduleSlotToDb(s: ScheduleSlot) {
+  return {
+    id: s.id,
+    classe_id: s.classeId,
+    day_of_week: s.dayOfWeek,
+    start_time: s.startTime,
+    end_time: s.endTime,
+    subject: s.subject,
+    teacher: s.teacher || null,
+    room: s.room || null,
+  };
+}
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function dbToStreamPost(r: any): StreamPost {
   return {
@@ -161,6 +187,7 @@ type StoreValue = {
   students: Student[];
   teachers: Teacher[];
   grades: Grade[];
+  schedule: ScheduleSlot[];
 
   findClasse: (id?: string | null) => Classe | undefined;
   findStudent: (id?: string | null) => Student | undefined;
@@ -173,14 +200,22 @@ type StoreValue = {
   classesByTeacher: (teacherId: string) => Classe[];
   gradeFor: (studentId: string, assignmentId: string) => number | undefined;
   gradesByStudent: (studentId: string) => Grade[];
+  scheduleByClasse: (classeId: string) => ScheduleSlot[];
 
   addClasse: (data: Omit<Classe, "id">) => Classe;
   updateClasse: (id: string, patch: Partial<Omit<Classe, "id">>) => void;
   removeClasse: (id: string) => void;
+  addCourse: (data: Omit<Course, "id">) => Course;
+  removeCourse: (id: string) => void;
+  addStudent: (data: Omit<Student, "id">) => Student;
+  removeStudent: (id: string) => void;
   setGrade: (studentId: string, assignmentId: string, score: number | null) => void;
   addAnnouncement: (data: Omit<Announcement, "id" | "when">) => Announcement;
   addAssignment: (data: Omit<Assignment, "id">) => Assignment;
   addStreamPost: (data: Omit<StreamPost, "id" | "when">) => StreamPost;
+  addScheduleSlot: (data: Omit<ScheduleSlot, "id">) => ScheduleSlot;
+  updateScheduleSlot: (id: string, patch: Partial<Omit<ScheduleSlot, "id">>) => void;
+  removeScheduleSlot: (id: string) => void;
   resetAll: () => void;
 };
 
@@ -211,52 +246,7 @@ export function ClassesProvider({ children }: { children: React.ReactNode }) {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [stream, setStream] = useState<StreamPost[]>([]);
-
-  /* ---- Seed helper ---- */
-  async function seedDatabase() {
-    await supabase.from("classes").insert(CLASSES_SEED.map(classeToDb));
-    await supabase.from("courses").insert(COURSES_SEED.map(courseToDb));
-    await supabase.from("students").insert(STUDENTS_SEED.map(studentToDb));
-    await supabase.from("grades").insert(
-      GRADES_SEED.map((g) => ({
-        student_id: g.studentId,
-        assignment_id: g.assignmentId,
-        score: g.score,
-      }))
-    );
-    await supabase.from("announcements").insert(
-      ANNOUNCEMENTS_SEED.map((a) => ({
-        id: a.id,
-        author: a.author,
-        role: a.role,
-        body: a.body,
-        classe_id: a.classeId ?? null,
-        course_id: a.courseId ?? null,
-      }))
-    );
-    await supabase.from("assignments").insert(
-      ASSIGNMENTS_SEED.map((a) => ({
-        id: a.id,
-        title: a.title,
-        course_id: a.courseId,
-        due_label: a.dueLabel,
-        done: a.done,
-      }))
-    );
-    // Only seed stream posts for valid course IDs (exclude dummy s16)
-    const validCourseIds = new Set(COURSES_SEED.map((c) => c.id));
-    await supabase.from("stream_posts").insert(
-      STREAM_SEED.filter((p) => validCourseIds.has(p.courseId)).map((p) => ({
-        id: p.id,
-        course_id: p.courseId,
-        author: p.author,
-        role: p.role,
-        body: p.body,
-        kind: p.kind,
-        title: p.title ?? null,
-      }))
-    );
-  }
+  const [schedule, setSchedule] = useState<ScheduleSlot[]>([]);
 
   /* ---- Initial load ---- */
   useEffect(() => {
@@ -269,6 +259,7 @@ export function ClassesProvider({ children }: { children: React.ReactNode }) {
         { data: ann },
         { data: asg },
         { data: stm },
+        { data: sch },
       ] = await Promise.all([
         supabase.from("classes").select("*").order("created_at"),
         supabase.from("courses").select("*").order("created_at"),
@@ -277,37 +268,18 @@ export function ClassesProvider({ children }: { children: React.ReactNode }) {
         supabase.from("announcements").select("*").order("created_at", { ascending: false }),
         supabase.from("assignments").select("*").order("created_at", { ascending: false }),
         supabase.from("stream_posts").select("*").order("created_at", { ascending: false }),
+        supabase.from("schedule_slots").select("*"),
       ]);
 
-      // Seed if DB empty
-      if (!cls || cls.length === 0) {
-        await seedDatabase();
-        // Reload after seed
-        const [{ data: cls2 }, { data: crs2 }, { data: sts2 }, { data: grd2 }, { data: ann2 }, { data: asg2 }, { data: stm2 }] = await Promise.all([
-          supabase.from("classes").select("*").order("created_at"),
-          supabase.from("courses").select("*").order("created_at"),
-          supabase.from("students").select("*").order("first_name"),
-          supabase.from("grades").select("*"),
-          supabase.from("announcements").select("*").order("created_at", { ascending: false }),
-          supabase.from("assignments").select("*").order("created_at", { ascending: false }),
-          supabase.from("stream_posts").select("*").order("created_at", { ascending: false }),
-        ]);
-        setClasses((cls2 ?? []).map(dbToClasse));
-        setCourses((crs2 ?? []).map(dbToCourse));
-        setStudents((sts2 ?? []).map(dbToStudent));
-        setGrades((grd2 ?? []).map(dbToGrade));
-        setAnnouncements((ann2 ?? []).map(dbToAnnouncement));
-        setAssignments((asg2 ?? []).map(dbToAssignment));
-        setStream((stm2 ?? []).map(dbToStreamPost));
-      } else {
-        setClasses((cls ?? []).map(dbToClasse));
-        setCourses((crs ?? []).map(dbToCourse));
-        setStudents((sts ?? []).map(dbToStudent));
-        setGrades((grd ?? []).map(dbToGrade));
-        setAnnouncements((ann ?? []).map(dbToAnnouncement));
-        setAssignments((asg ?? []).map(dbToAssignment));
-        setStream((stm ?? []).map(dbToStreamPost));
-      }
+      // No more auto-seed — admin creates everything manually
+      setClasses((cls ?? []).map(dbToClasse));
+      setCourses((crs ?? []).map(dbToCourse));
+      setStudents((sts ?? []).map(dbToStudent));
+      setGrades((grd ?? []).map(dbToGrade));
+      setAnnouncements((ann ?? []).map(dbToAnnouncement));
+      setAssignments((asg ?? []).map(dbToAssignment));
+      setStream((stm ?? []).map(dbToStreamPost));
+      setSchedule((sch ?? []).map(dbToScheduleSlot));
 
       setReady(true);
     }
@@ -397,26 +369,57 @@ export function ClassesProvider({ children }: { children: React.ReactNode }) {
 
   const teachers = useMemo(() => TEACHERS_SEED, []);
 
+  const scheduleByClasse = useCallback(
+    (classeId: string) => schedule.filter((s) => s.classeId === classeId),
+    [schedule]
+  );
+
   /* ---- Mutations ---- */
   const addClasse = useCallback(
     (data: Omit<Classe, "id">) => {
       const existing = new Set(classes.map((c) => c.id));
       const id = uniqueId(slugify(data.name), existing);
       const classe: Classe = { ...data, id };
-      const newCourses = buildCoursesForClasse(classe);
-      const newStudents = buildStudentsForClasse(classe);
-      // Optimistic
       setClasses((cs) => [...cs, classe]);
-      setCourses((xs) => [...xs, ...newCourses]);
-      setStudents((ss) => [...ss, ...newStudents]);
-      // DB
       supabase.from("classes").insert(classeToDb(classe));
-      supabase.from("courses").insert(newCourses.map(courseToDb));
-      supabase.from("students").insert(newStudents.map(studentToDb));
       return classe;
     },
     [classes]
   );
+
+  const addCourse = useCallback(
+    (data: Omit<Course, "id">) => {
+      const existing = new Set(courses.map((c) => c.id));
+      const id = uniqueId(slugify(`${data.classeId}-${data.name}`), existing);
+      const course: Course = { ...data, id };
+      setCourses((xs) => [...xs, course]);
+      supabase.from("courses").insert(courseToDb(course));
+      return course;
+    },
+    [courses]
+  );
+
+  const removeCourse = useCallback((id: string) => {
+    setCourses((xs) => xs.filter((c) => c.id !== id));
+    supabase.from("courses").delete().eq("id", id);
+  }, []);
+
+  const addStudent = useCallback(
+    (data: Omit<Student, "id">) => {
+      const existing = new Set(students.map((s) => s.id));
+      const id = uniqueId(slugify(`${data.classeId}-${data.firstName}-${data.lastName}`), existing);
+      const student: Student = { ...data, id };
+      setStudents((ss) => [...ss, student]);
+      supabase.from("students").insert(studentToDb(student));
+      return student;
+    },
+    [students]
+  );
+
+  const removeStudent = useCallback((id: string) => {
+    setStudents((ss) => ss.filter((s) => s.id !== id));
+    supabase.from("students").delete().eq("id", id);
+  }, []);
 
   const updateClasse = useCallback((id: string, patch: Partial<Omit<Classe, "id">>) => {
     setClasses((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c)));
@@ -510,12 +513,39 @@ export function ClassesProvider({ children }: { children: React.ReactNode }) {
     return p;
   }, []);
 
+  const addScheduleSlot = useCallback((data: Omit<ScheduleSlot, "id">) => {
+    const id = `sch-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const slot: ScheduleSlot = { ...data, id };
+    setSchedule((xs) => [...xs, slot]);
+    supabase.from("schedule_slots").insert(scheduleSlotToDb(slot));
+    return slot;
+  }, []);
+
+  const updateScheduleSlot = useCallback((id: string, patch: Partial<Omit<ScheduleSlot, "id">>) => {
+    setSchedule((xs) => xs.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dbPatch: any = {};
+    if (patch.classeId !== undefined) dbPatch.classe_id = patch.classeId;
+    if (patch.dayOfWeek !== undefined) dbPatch.day_of_week = patch.dayOfWeek;
+    if (patch.startTime !== undefined) dbPatch.start_time = patch.startTime;
+    if (patch.endTime !== undefined) dbPatch.end_time = patch.endTime;
+    if (patch.subject !== undefined) dbPatch.subject = patch.subject;
+    if (patch.teacher !== undefined) dbPatch.teacher = patch.teacher || null;
+    if (patch.room !== undefined) dbPatch.room = patch.room || null;
+    supabase.from("schedule_slots").update(dbPatch).eq("id", id);
+  }, []);
+
+  const removeScheduleSlot = useCallback((id: string) => {
+    setSchedule((xs) => xs.filter((s) => s.id !== id));
+    supabase.from("schedule_slots").delete().eq("id", id);
+  }, []);
+
   const resetAll = useCallback(async () => {
-    // Delete everything and re-seed
+    // Delete everything (no reseed — admin fills manually)
     await supabase.from("classes").delete().neq("id", "___never___");
-    await seedDatabase();
+    await supabase.from("announcements").delete().neq("id", "___never___");
+    await supabase.from("schedule_slots").delete().neq("id", "___never___");
     window.location.reload();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const value: StoreValue = {
@@ -529,6 +559,7 @@ export function ClassesProvider({ children }: { children: React.ReactNode }) {
     students,
     teachers,
     grades,
+    schedule,
     findClasse,
     findStudent,
     findTeacher,
@@ -540,13 +571,21 @@ export function ClassesProvider({ children }: { children: React.ReactNode }) {
     classesByTeacher,
     gradeFor,
     gradesByStudent,
+    scheduleByClasse,
     addClasse,
     updateClasse,
     removeClasse,
+    addCourse,
+    removeCourse,
+    addStudent,
+    removeStudent,
     setGrade,
     addAnnouncement,
     addAssignment,
     addStreamPost,
+    addScheduleSlot,
+    updateScheduleSlot,
+    removeScheduleSlot,
     resetAll,
   };
 

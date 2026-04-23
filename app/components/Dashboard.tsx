@@ -82,6 +82,11 @@ function StudentView({ classeId }: { classeId?: string }) {
         </div>
 
         <aside className="space-y-6">
+          <QuickActions
+            actions={[
+              { label: "Emploi du temps", emoji: "🗓️", accent: "from-sky-500 to-indigo-500", href: "/schedule" },
+            ]}
+          />
           <AnnouncementsPanel items={announcements} />
           <UpcomingPanel items={assignments} />
         </aside>
@@ -193,6 +198,7 @@ function TeacherView({ teacherId }: { teacherId?: string }) {
               ...(myCourses[0]
                 ? [{ label: "Saisir les notes", emoji: "📊", accent: "from-violet-500 to-purple-500", href: `/class/${myCourses[0].id}?tab=grades` }]
                 : []),
+              { label: "Emploi du temps", emoji: "🗓️", accent: "from-sky-500 to-indigo-500", href: "/schedule" },
               { label: "Poster une annonce", emoji: "📢", accent: "from-indigo-500 to-fuchsia-500", onClick: () => setAction("announcement") },
               { label: "Créer un devoir", emoji: "📝", accent: "from-emerald-500 to-cyan-500", onClick: () => setAction("assignment") },
               { label: "Ajouter une ressource", emoji: "📎", accent: "from-amber-500 to-red-500", onClick: () => setAction("material") },
@@ -436,6 +442,7 @@ function AdminView() {
               { label: "Annonce générale", emoji: "📣", accent: "from-rose-500 to-orange-500", onClick: () => setComposing(true) },
               { label: "Gérer les classes", emoji: "🏫", accent: "from-indigo-500 to-fuchsia-500", href: "/admin/classes" },
               { label: "Gérer les utilisateurs", emoji: "👥", accent: "from-cyan-500 to-blue-500", href: "/admin/users" },
+              { label: "Emploi du temps", emoji: "🗓️", accent: "from-violet-500 to-purple-500", href: "/admin/schedule" },
             ]}
           />
           <AnnouncementsPanel items={announcements.slice(0, 4)} compact />

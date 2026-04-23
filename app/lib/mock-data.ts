@@ -453,7 +453,9 @@ function buildTeachersSeed(): Teacher[] {
   return Array.from(map.values());
 }
 
-export const TEACHERS_SEED: Teacher[] = buildTeachersSeed();
+export const TEACHERS_SEED: Teacher[] = [];
+// (ancien : buildTeachersSeed() — profs créés maintenant via /admin/users)
+void buildTeachersSeed;
 
 /* ============================================================
    GRADES — deterministic starter grades per student × assignment
