@@ -36,20 +36,26 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 async function fetchProfile(id: string, email: string): Promise<User | null> {
-  const { data } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", id)
-    .single();
-  if (!data) return null;
-  return {
-    id,
-    email,
-    name: data.name ?? "",
-    role: (data.role ?? "student") as Role,
-    classeId: data.classe_id ?? undefined,
-    teacherId: data.teacher_id ?? undefined,
-  };
+  try {
+    const { data } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (!data) {
+      return { id, email, name: "", role: "student" };
+    }
+    return {
+      id,
+      email,
+      name: data.name ?? "",
+      role: (data.role ?? "student") as Role,
+      classeId: data.classe_id ?? undefined,
+      teacherId: data.teacher_id ?? undefined,
+    };
+  } catch {
+    return { id, email, name: "", role: "student" };
+  }
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -57,14 +63,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    // Fallback : si Supabase traîne ou plante, on affiche l'app quand même
+    const timeout = setTimeout(() => setReady(true), 5000);
+
     // Check existing session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        const profile = await fetchProfile(session.user.id, session.user.email ?? "");
-        setUser(profile);
-      }
-      setReady(true);
-    });
+    supabase.auth.getSession()
+      .then(async ({ data: { session } }) => {
+        if (session?.user) {
+          const profile = await fetchProfile(session.user.id, session.user.email ?? "");
+          setUser(profile);
+        }
+      })
+      .catch(() => { /* ignore */ })
+      .finally(() => {
+        clearTimeout(timeout);
+        setReady(true);
+      });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(

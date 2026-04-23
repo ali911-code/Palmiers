@@ -250,7 +250,10 @@ export function ClassesProvider({ children }: { children: React.ReactNode }) {
 
   /* ---- Initial load ---- */
   useEffect(() => {
+    // Fallback : on débloque l'app même si Supabase traîne
+    const timeout = setTimeout(() => setReady(true), 5000);
     async function load() {
+      try {
       const [
         { data: cls },
         { data: crs },
@@ -261,14 +264,14 @@ export function ClassesProvider({ children }: { children: React.ReactNode }) {
         { data: stm },
         { data: sch },
       ] = await Promise.all([
-        supabase.from("classes").select("*").order("created_at"),
-        supabase.from("courses").select("*").order("created_at"),
-        supabase.from("students").select("*").order("first_name"),
-        supabase.from("grades").select("*"),
-        supabase.from("announcements").select("*").order("created_at", { ascending: false }),
-        supabase.from("assignments").select("*").order("created_at", { ascending: false }),
-        supabase.from("stream_posts").select("*").order("created_at", { ascending: false }),
-        supabase.from("schedule_slots").select("*"),
+        supabase.from("classes").select("*").order("created_at").then(r => r).catch(() => ({ data: [] })),
+        supabase.from("courses").select("*").order("created_at").then(r => r).catch(() => ({ data: [] })),
+        supabase.from("students").select("*").order("first_name").then(r => r).catch(() => ({ data: [] })),
+        supabase.from("grades").select("*").then(r => r).catch(() => ({ data: [] })),
+        supabase.from("announcements").select("*").order("created_at", { ascending: false }).then(r => r).catch(() => ({ data: [] })),
+        supabase.from("assignments").select("*").order("created_at", { ascending: false }).then(r => r).catch(() => ({ data: [] })),
+        supabase.from("stream_posts").select("*").order("created_at", { ascending: false }).then(r => r).catch(() => ({ data: [] })),
+        supabase.from("schedule_slots").select("*").then(r => r).catch(() => ({ data: [] })),
       ]);
 
       // No more auto-seed — admin creates everything manually
@@ -280,8 +283,12 @@ export function ClassesProvider({ children }: { children: React.ReactNode }) {
       setAssignments((asg ?? []).map(dbToAssignment));
       setStream((stm ?? []).map(dbToStreamPost));
       setSchedule((sch ?? []).map(dbToScheduleSlot));
-
-      setReady(true);
+      } catch {
+        /* ignore — ready sera mis à true ci-dessous */
+      } finally {
+        clearTimeout(timeout);
+        setReady(true);
+      }
     }
     load();
   // eslint-disable-next-line react-hooks/exhaustive-deps
