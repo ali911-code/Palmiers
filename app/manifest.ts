@@ -15,15 +15,21 @@ export default function manifest(): MetadataRoute.Manifest {
     lang: "fr",
     icons: [
       {
-        src: "/icon.svg",
-        sizes: "512x512",
-        type: "image/svg+xml",
+        src: "/android-chrome-512x512.png",
+        sizes: "192x192",
+        type: "image/png",
         purpose: "any",
       },
       {
-        src: "/icon-maskable.svg",
+        src: "/android-chrome-512x512.png",
         sizes: "512x512",
-        type: "image/svg+xml",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: "/android-chrome-512x512.png",
+        sizes: "512x512",
+        type: "image/png",
         purpose: "maskable",
       },
     ],
