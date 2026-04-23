@@ -97,9 +97,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return error.message;
-    return null;
+    try {
+      const result = await Promise.race([
+        supabase.auth.signInWithPassword({ email, password }),
+        new Promise<{ error: { message: string } }>((resolve) =>
+          setTimeout(
+            () => resolve({ error: { message: "Serveur lent ou indisponible (Supabase en pause ?). Réessaie dans 1 min." } }),
+            15000
+          )
+        ),
+      ]);
+      if (result.error) return result.error.message;
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Erreur de connexion";
+    }
   }, []);
 
   const signUp = useCallback(async (
