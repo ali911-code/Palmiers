@@ -145,8 +145,7 @@ export default function LoginPage() {
                       />
                     )}
                     <div className="text-xl">{r.emoji}</div>
-                    <div className="mt-1 text-sm font-semibold">{r.label}</div>
-                    <div className="text-[10px] leading-tight text-slate-500">{r.hint}</div>
+                    <div className={`mt-1 font-semibold ${r.value === "admin" ? "text-[10px] sm:text-sm" : "text-sm"}`}>{r.label}</div>
                   </motion.button>
                 );
               })}
