@@ -254,6 +254,15 @@ export function ClassesProvider({ children }: { children: React.ReactNode }) {
     const timeout = setTimeout(() => setReady(true), 5000);
     async function load() {
       try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const safe = async (q: PromiseLike<any>): Promise<{ data: any[] }> => {
+        try {
+          const r = await q;
+          return { data: r?.data ?? [] };
+        } catch {
+          return { data: [] };
+        }
+      };
       const [
         { data: cls },
         { data: crs },
@@ -264,14 +273,14 @@ export function ClassesProvider({ children }: { children: React.ReactNode }) {
         { data: stm },
         { data: sch },
       ] = await Promise.all([
-        supabase.from("classes").select("*").order("created_at").then(r => r).catch(() => ({ data: [] })),
-        supabase.from("courses").select("*").order("created_at").then(r => r).catch(() => ({ data: [] })),
-        supabase.from("students").select("*").order("first_name").then(r => r).catch(() => ({ data: [] })),
-        supabase.from("grades").select("*").then(r => r).catch(() => ({ data: [] })),
-        supabase.from("announcements").select("*").order("created_at", { ascending: false }).then(r => r).catch(() => ({ data: [] })),
-        supabase.from("assignments").select("*").order("created_at", { ascending: false }).then(r => r).catch(() => ({ data: [] })),
-        supabase.from("stream_posts").select("*").order("created_at", { ascending: false }).then(r => r).catch(() => ({ data: [] })),
-        supabase.from("schedule_slots").select("*").then(r => r).catch(() => ({ data: [] })),
+        safe(supabase.from("classes").select("*").order("created_at")),
+        safe(supabase.from("courses").select("*").order("created_at")),
+        safe(supabase.from("students").select("*").order("first_name")),
+        safe(supabase.from("grades").select("*")),
+        safe(supabase.from("announcements").select("*").order("created_at", { ascending: false })),
+        safe(supabase.from("assignments").select("*").order("created_at", { ascending: false })),
+        safe(supabase.from("stream_posts").select("*").order("created_at", { ascending: false })),
+        safe(supabase.from("schedule_slots").select("*")),
       ]);
 
       // No more auto-seed — admin creates everything manually
