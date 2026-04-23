@@ -408,7 +408,7 @@ function AdminView() {
                   whileHover={{ y: -4 }}
                   className="relative rounded-2xl bg-white border border-slate-200/70 overflow-hidden shadow-sm hover:shadow-xl transition-shadow"
                 >
-                  <Link href={`/classes/${c.id}`} className="block text-left">
+                  <Link href={`/admin/classes/${c.id}`} className="block text-left">
                     <div className={`h-24 bg-gradient-to-br ${c.accent} relative`}>
                       <div className="absolute inset-0 opacity-30 bg-[radial-gradient(ellipse_at_top_right,white,transparent_60%)]" />
                       <div className="absolute top-3 left-4 text-white">
