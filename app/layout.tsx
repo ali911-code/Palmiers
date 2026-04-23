@@ -19,10 +19,16 @@ export const metadata: Metadata = {
   title: "Les Palmiers",
   description: "École Les Palmiers — annonces, devoirs, notes et emploi du temps.",
   applicationName: "Les Palmiers",
+  manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     title: "Les Palmiers",
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
+    startupImage: "/icon.svg",
+  },
+  icons: {
+    apple: "/icon.svg",
+    icon: "/icon.svg",
   },
 };
 

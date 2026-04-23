@@ -6,9 +6,12 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "Palmiers",
     description: "École Les Palmiers — annonces, devoirs, notes et emploi du temps.",
     start_url: "/",
+    scope: "/",
     display: "standalone",
+    orientation: "portrait",
     background_color: "#ffffff",
     theme_color: "#0d9488",
+    categories: ["education"],
     icons: [
       {
         src: "/icon.svg",
