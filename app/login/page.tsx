@@ -48,12 +48,20 @@ export default function LoginPage() {
     setSubmitting(true);
     setError(null);
 
+    // Fail-safe: si rien ne bouge au bout de 12s on débloque le bouton
+    const failSafe = setTimeout(() => {
+      setError("Le serveur ne répond pas. Vérifie ta connexion et réessaie.");
+      setSubmitting(false);
+    }, 12000);
+
     // Try sign in first
     const signInErr = await signIn(email.trim(), password);
     if (!signInErr) {
+      clearTimeout(failSafe);
       router.replace("/");
       return;
     }
+    clearTimeout(failSafe);
 
     // If not found → sign up
     if (
@@ -66,6 +74,11 @@ export default function LoginPage() {
         name.trim() ||
         (role === "teacher" && selectedTeacher ? selectedTeacher.name : defaultName(role));
 
+      const failSafe2 = setTimeout(() => {
+        setError("Le serveur ne répond pas. Vérifie ta connexion et réessaie.");
+        setSubmitting(false);
+      }, 15000);
+
       const signUpErr = await signUp(email.trim(), password, {
         name: resolvedName,
         role,
@@ -74,6 +87,7 @@ export default function LoginPage() {
       });
 
       if (signUpErr) {
+        clearTimeout(failSafe2);
         setError(signUpErr);
         setSubmitting(false);
         return;
@@ -81,6 +95,7 @@ export default function LoginPage() {
 
       // Sign in after sign up
       const err2 = await signIn(email.trim(), password);
+      clearTimeout(failSafe2);
       if (err2) {
         // Supabase might require email confirmation — show friendly message
         setError("Compte créé ! Vérifiez vos emails pour confirmer votre compte, puis reconnectez-vous.");
