@@ -1,13 +1,14 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, notFound } from "next/navigation";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import TopBar from "../../../components/TopBar";
 import { useAuth } from "../../../lib/auth";
 import { useClasses } from "../../../lib/classes-store";
-import type { Course, Student } from "../../../lib/mock-data";
+import { supabase } from "../../../lib/supabase";
+import type { Course } from "../../../lib/mock-data";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -29,6 +30,13 @@ const COURSE_ACCENTS = [
   "from-rose-500 to-orange-500",
 ];
 
+type ProfileRow = {
+  id: string;
+  name: string | null;
+  role: "student" | "teacher" | "admin";
+  classe_id: string | null;
+};
+
 export default function AdminClasseDetailPage({
   params,
 }: {
@@ -44,17 +52,31 @@ export default function AdminClasseDetailPage({
     gradesByStudent,
     addCourse,
     removeCourse,
-    addStudent,
-    removeStudent,
   } = useClasses();
 
   const [addingCourse, setAddingCourse] = useState(false);
-  const [addingStudent, setAddingStudent] = useState(false);
+  const [assigningStudent, setAssigningStudent] = useState(false);
+  const [assigningTeacher, setAssigningTeacher] = useState(false);
+  const [teacherProfiles, setTeacherProfiles] = useState<ProfileRow[]>([]);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (ready && !user) router.replace("/login");
     else if (ready && user && user.role !== "admin") router.replace("/");
   }, [ready, user, router]);
+
+  // Fetch all teacher profiles (for this class and for picker)
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, name, role, classe_id")
+        .eq("role", "teacher");
+      setTeacherProfiles((data ?? []) as ProfileRow[]);
+    })();
+  }, [reloadKey]);
+
+  const reload = useCallback(() => setReloadKey((k) => k + 1), []);
 
   const classe = findClasse(id);
   if (ready && !classe) notFound();
@@ -75,6 +97,27 @@ export default function AdminClasseDetailPage({
 
   const students = studentsByClasse(classe.id);
   const courses = coursesByClasse(classe.id);
+  const teachersInClasse = teacherProfiles.filter((t) => t.classe_id === classe.id);
+
+  async function assignUserToClass(userId: string, classeId: string | null) {
+    const target = teacherProfiles.find((t) => t.id === userId);
+    const body: Record<string, unknown> = { userId, classeId };
+    if (target) {
+      body.name = target.name ?? "";
+      body.role = target.role;
+    }
+    const res = await fetch("/api/create-user", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const { error } = await res.json().catch(() => ({ error: "Erreur" }));
+      alert(`Erreur: ${error ?? "inconnue"}`);
+      return false;
+    }
+    return true;
+  }
 
   return (
     <div className="flex-1 flex flex-col">
@@ -106,7 +149,7 @@ export default function AdminClasseDetailPage({
                 {classe.name}
               </h1>
               <p className="text-sm text-white/85">
-                {classe.level} · {students.length} élèves · {courses.length} cours
+                {classe.level} · {students.length} élèves · {teachersInClasse.length} enseignants · {courses.length} cours
               </p>
             </div>
           </motion.div>
@@ -169,6 +212,56 @@ export default function AdminClasseDetailPage({
           )}
         </section>
 
+        {/* Enseignants */}
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Enseignants ({teachersInClasse.length})
+            </h2>
+            <button
+              onClick={() => setAssigningTeacher(true)}
+              className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+            >
+              + Ajouter un enseignant
+            </button>
+          </div>
+
+          {teachersInClasse.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500 text-sm">
+              Aucun enseignant affecté à cette classe.
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {teachersInClasse.map((t) => (
+                <div
+                  key={t.id}
+                  className="group relative rounded-2xl bg-white border border-slate-200/70 p-4 shadow-sm hover:shadow-md transition-shadow flex items-center gap-3"
+                >
+                  <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-500 grid place-items-center text-xl shadow text-white">
+                    🎓
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-slate-900 truncate">
+                      {t.name || "Sans nom"}
+                    </div>
+                    <div className="text-[11px] text-slate-500">Enseignant</div>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (!confirm(`Retirer ${t.name || "cet enseignant"} de la classe ?`)) return;
+                      const ok = await assignUserToClass(t.id, null);
+                      if (ok) reload();
+                    }}
+                    className="text-rose-400 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity text-xs px-2 py-1 rounded-lg hover:bg-rose-50"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
         {/* Élèves */}
         <section>
           <div className="flex items-center justify-between mb-4">
@@ -176,7 +269,7 @@ export default function AdminClasseDetailPage({
               Élèves ({students.length})
             </h2>
             <button
-              onClick={() => setAddingStudent(true)}
+              onClick={() => setAssigningStudent(true)}
               className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
             >
               + Ajouter un élève
@@ -223,8 +316,10 @@ export default function AdminClasseDetailPage({
                         </div>
                       </Link>
                       <button
-                        onClick={() => {
-                          if (confirm(`Retirer ${s.firstName} ${s.lastName} ?`)) removeStudent(s.id);
+                        onClick={async () => {
+                          if (!confirm(`Retirer ${s.firstName} ${s.lastName} de la classe ?`)) return;
+                          const ok = await assignUserToClass(s.id, null);
+                          if (ok) window.location.reload();
                         }}
                         className="absolute top-2 right-2 text-rose-400 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity text-xs px-2 py-1 rounded-lg hover:bg-rose-50"
                       >
@@ -250,13 +345,29 @@ export default function AdminClasseDetailPage({
             }}
           />
         )}
-        {addingStudent && (
-          <StudentModal
+        {assigningStudent && (
+          <UserPickerModal
+            title="Ajouter un élève"
+            role="student"
             classeId={classe.id}
-            onClose={() => setAddingStudent(false)}
-            onSave={(data) => {
-              addStudent(data);
-              setAddingStudent(false);
+            onClose={() => setAssigningStudent(false)}
+            onPicked={async (userId) => {
+              const ok = await assignUserToClass(userId, classe.id);
+              setAssigningStudent(false);
+              if (ok) window.location.reload();
+            }}
+          />
+        )}
+        {assigningTeacher && (
+          <UserPickerModal
+            title="Ajouter un enseignant"
+            role="teacher"
+            classeId={classe.id}
+            onClose={() => setAssigningTeacher(false)}
+            onPicked={async (userId) => {
+              const ok = await assignUserToClass(userId, classe.id);
+              setAssigningTeacher(false);
+              if (ok) reload();
             }}
           />
         )}
@@ -265,6 +376,120 @@ export default function AdminClasseDetailPage({
   );
 }
 
+/* ============================================================
+   User picker (students or teachers from profiles table)
+   ============================================================ */
+function UserPickerModal({
+  title,
+  role,
+  classeId,
+  onClose,
+  onPicked,
+}: {
+  title: string;
+  role: "student" | "teacher";
+  classeId: string;
+  onClose: () => void;
+  onPicked: (userId: string) => void;
+}) {
+  const [profiles, setProfiles] = useState<ProfileRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, name, role, classe_id")
+        .eq("role", role);
+      setProfiles((data ?? []) as ProfileRow[]);
+      setLoading(false);
+    })();
+  }, [role]);
+
+  const filtered = profiles
+    .filter((p) => p.classe_id !== classeId) // exclude already in this class
+    .filter((p) => (query ? (p.name ?? "").toLowerCase().includes(query.toLowerCase()) : true));
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm grid place-items-center p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 20, scale: 0.96 }}
+        transition={{ duration: 0.25 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md rounded-3xl bg-white shadow-2xl p-6 max-h-[90vh] overflow-hidden flex flex-col"
+      >
+        <h2 className="text-lg font-bold tracking-tight mb-4">{title}</h2>
+
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Rechercher par nom…"
+          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 mb-3"
+        />
+
+        <div className="flex-1 overflow-y-auto -mx-2 px-2 space-y-2">
+          {loading ? (
+            <div className="text-center text-sm text-slate-500 py-8">Chargement…</div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center text-sm text-slate-500 py-8">
+              Aucun compte {role === "student" ? "élève" : "enseignant"} disponible.
+              <br />
+              <span className="text-xs text-slate-400">
+                Crée d&apos;abord le compte via « Gérer les utilisateurs ».
+              </span>
+            </div>
+          ) : (
+            filtered.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => onPicked(p.id)}
+                className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 border border-slate-200 text-left transition-colors"
+              >
+                <div className={`h-10 w-10 rounded-xl grid place-items-center text-lg shadow ${
+                  role === "student"
+                    ? "bg-gradient-to-br from-emerald-500 to-cyan-500"
+                    : "bg-gradient-to-br from-violet-500 to-purple-500"
+                } text-white`}>
+                  {role === "student" ? "🧑‍🎓" : "🎓"}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-slate-900 truncate text-sm">
+                    {p.name || "Sans nom"}
+                  </div>
+                  {p.classe_id && p.classe_id !== classeId && (
+                    <div className="text-[11px] text-amber-600">
+                      Actuellement dans : {p.classe_id}
+                    </div>
+                  )}
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+
+        <button
+          onClick={onClose}
+          className="mt-4 w-full rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 py-2.5 text-sm font-semibold"
+        >
+          Fermer
+        </button>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+/* ============================================================
+   Course modal (unchanged)
+   ============================================================ */
 function CourseModal({
   classeId,
   onClose,
@@ -370,146 +595,6 @@ function CourseModal({
             className={`flex-1 rounded-xl bg-gradient-to-r ${accent} text-white py-2.5 text-sm font-semibold shadow-md disabled:opacity-50`}
           >
             Créer
-          </motion.button>
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-}
-
-function StudentModal({
-  classeId,
-  onClose,
-  onSave,
-}: {
-  classeId: string;
-  onClose: () => void;
-  onSave: (data: Omit<Student, "id">) => void;
-}) {
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [email, setEmail] = useState("");
-  const [emoji, setEmoji] = useState("🧑‍🎓");
-  const [birthDate, setBirthDate] = useState("");
-  const [parentName, setParentName] = useState("");
-  const [parentPhone, setParentPhone] = useState("");
-
-  const canSave = firstName.trim() && lastName.trim();
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm grid place-items-center p-4"
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ opacity: 0, y: 20, scale: 0.96 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 20, scale: 0.96 }}
-        transition={{ duration: 0.25 }}
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-3xl bg-white shadow-2xl p-6 max-h-[90vh] overflow-y-auto"
-      >
-        <div className="flex items-center gap-3 mb-5">
-          <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-emerald-500 to-cyan-500 grid place-items-center text-2xl shadow-md">
-            {emoji}
-          </div>
-          <h2 className="text-lg font-bold tracking-tight">Nouvel élève</h2>
-        </div>
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-2">
-            <label className="block">
-              <span className="text-xs font-medium text-slate-600 mb-1.5 block">Prénom</span>
-              <input
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                autoFocus
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-              />
-            </label>
-            <label className="block">
-              <span className="text-xs font-medium text-slate-600 mb-1.5 block">Nom</span>
-              <input
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-              />
-            </label>
-          </div>
-          <label className="block">
-            <span className="text-xs font-medium text-slate-600 mb-1.5 block">Email (optionnel)</span>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-            />
-          </label>
-          <label className="block">
-            <span className="text-xs font-medium text-slate-600 mb-1.5 block">Emoji</span>
-            <input
-              value={emoji}
-              onChange={(e) => setEmoji(e.target.value)}
-              maxLength={4}
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xl text-center focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-            />
-          </label>
-          <label className="block">
-            <span className="text-xs font-medium text-slate-600 mb-1.5 block">Date de naissance (optionnel)</span>
-            <input
-              type="date"
-              value={birthDate}
-              onChange={(e) => setBirthDate(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-            />
-          </label>
-          <label className="block">
-            <span className="text-xs font-medium text-slate-600 mb-1.5 block">Parent (optionnel)</span>
-            <input
-              value={parentName}
-              onChange={(e) => setParentName(e.target.value)}
-              placeholder="Nom du parent"
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-            />
-          </label>
-          <label className="block">
-            <span className="text-xs font-medium text-slate-600 mb-1.5 block">Téléphone parent (optionnel)</span>
-            <input
-              value={parentPhone}
-              onChange={(e) => setParentPhone(e.target.value)}
-              placeholder="+212…"
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-            />
-          </label>
-        </div>
-        <div className="mt-6 flex gap-2">
-          <button
-            onClick={onClose}
-            className="flex-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 py-2.5 text-sm font-semibold"
-          >
-            Annuler
-          </button>
-          <motion.button
-            disabled={!canSave}
-            onClick={() =>
-              canSave &&
-              onSave({
-                classeId,
-                firstName: firstName.trim(),
-                lastName: lastName.trim(),
-                email: email.trim(),
-                emoji,
-                birthDate,
-                parentName: parentName.trim(),
-                parentPhone: parentPhone.trim(),
-              })
-            }
-            whileTap={{ scale: 0.98 }}
-            className="flex-1 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-white py-2.5 text-sm font-semibold shadow-md disabled:opacity-50"
-          >
-            Ajouter
           </motion.button>
         </div>
       </motion.div>
