@@ -32,6 +32,7 @@ export default function AdminUsersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<UserRow | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -117,13 +118,21 @@ export default function AdminUsersPage() {
                     {classe && <div className="text-xs text-slate-400">{classe.emoji} {classe.name}</div>}
                     {teacher && <div className="text-xs text-slate-400">👩‍🏫 {teacher.name}</div>}
                   </div>
-                  <button
-                    onClick={() => handleDelete(u.id)}
-                    disabled={deleting === u.id}
-                    className="text-xs text-rose-500 hover:text-rose-700 font-medium px-2 py-1 rounded-lg hover:bg-rose-50 transition-colors disabled:opacity-50"
-                  >
-                    {deleting === u.id ? "…" : "Supprimer"}
-                  </button>
+                  <div className="flex flex-col gap-1">
+                    <button
+                      onClick={() => setEditing(u)}
+                      className="text-xs text-indigo-600 hover:text-indigo-800 font-medium px-2 py-1 rounded-lg hover:bg-indigo-50 transition-colors"
+                    >
+                      Modifier
+                    </button>
+                    <button
+                      onClick={() => handleDelete(u.id)}
+                      disabled={deleting === u.id}
+                      className="text-xs text-rose-500 hover:text-rose-700 font-medium px-2 py-1 rounded-lg hover:bg-rose-50 transition-colors disabled:opacity-50"
+                    >
+                      {deleting === u.id ? "…" : "Supprimer"}
+                    </button>
+                  </div>
                 </motion.div>
               );
             })}
@@ -139,6 +148,18 @@ export default function AdminUsersPage() {
             onClose={() => setCreating(false)}
             onCreated={async () => {
               setCreating(false);
+              await loadUsers();
+            }}
+          />
+        )}
+        {editing && (
+          <EditUserModal
+            user={editing}
+            classes={classes}
+            teachers={teachers}
+            onClose={() => setEditing(null)}
+            onSaved={async () => {
+              setEditing(null);
               await loadUsers();
             }}
           />
@@ -327,6 +348,171 @@ function CreateUserModal({
               className="flex-1 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 text-white py-2.5 text-sm font-semibold shadow-md disabled:opacity-50"
             >
               {submitting ? "Création…" : "Créer le compte"}
+            </motion.button>
+          </div>
+        </form>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function EditUserModal({
+  user,
+  classes,
+  teachers,
+  onClose,
+  onSaved,
+}: {
+  user: UserRow;
+  classes: { id: string; name: string; emoji: string }[];
+  teachers: { id: string; name: string }[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [role, setRole] = useState<UserRow["role"]>(user.role);
+  const [name, setName] = useState(user.name);
+  const [classeId, setClasseId] = useState(user.classeId ?? (classes[0]?.id ?? ""));
+  const [teacherId, setTeacherId] = useState(user.teacherId ?? (teachers[0]?.id ?? ""));
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    const res = await fetch("/api/create-user", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: user.id,
+        name: name.trim(),
+        role,
+        classeId: role === "student" ? classeId : null,
+        teacherId: role === "teacher" ? teacherId : null,
+      }),
+    });
+    const data = await res.json();
+    if (data.error) {
+      setError(data.error);
+      setSubmitting(false);
+    } else {
+      onSaved();
+    }
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm grid place-items-center p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 20, scale: 0.96 }}
+        transition={{ duration: 0.25 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md rounded-3xl bg-white shadow-2xl p-6 max-h-[90vh] overflow-y-auto"
+      >
+        <div className="flex items-center gap-3 mb-5">
+          <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-indigo-500 to-fuchsia-500 grid place-items-center text-2xl shadow-md">
+            ✏️
+          </div>
+          <div>
+            <h2 className="text-lg font-bold tracking-tight">Modifier le compte</h2>
+            <p className="text-xs text-slate-500">{user.email}</p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <span className="text-xs font-medium text-slate-600 mb-2 block">Rôle</span>
+            <div className="grid grid-cols-3 gap-2">
+              {(["student", "teacher", "admin"] as const).map((r) => (
+                <button
+                  type="button"
+                  key={r}
+                  onClick={() => setRole(r)}
+                  className={`rounded-xl p-2.5 text-center border text-sm font-medium transition-colors ${
+                    role === r
+                      ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                      : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  {r === "student" ? "🎒 Élève" : r === "teacher" ? "👩‍🏫 Prof" : "🛡️ Admin"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {role === "student" && (
+            <label className="block">
+              <span className="text-xs font-medium text-slate-600 mb-1.5 block">Classe</span>
+              {classes.length === 0 ? (
+                <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-2.5 text-xs text-amber-700">
+                  Crée d&apos;abord une classe.
+                </div>
+              ) : (
+                <select
+                  value={classeId}
+                  onChange={(e) => setClasseId(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                >
+                  <option value="">— Aucune —</option>
+                  {classes.map((c) => (
+                    <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>
+                  ))}
+                </select>
+              )}
+            </label>
+          )}
+
+          {role === "teacher" && teachers.length > 0 && (
+            <label className="block">
+              <span className="text-xs font-medium text-slate-600 mb-1.5 block">Profil enseignant</span>
+              <select
+                value={teacherId}
+                onChange={(e) => setTeacherId(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+              >
+                <option value="">— Aucun —</option>
+                {teachers.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          <label className="block">
+            <span className="text-xs font-medium text-slate-600 mb-1.5 block">Nom complet</span>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+            />
+          </label>
+
+          {error && (
+            <div className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700">{error}</div>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 py-2.5 text-sm font-semibold"
+            >
+              Annuler
+            </button>
+            <motion.button
+              type="submit"
+              disabled={submitting}
+              whileTap={{ scale: 0.98 }}
+              className="flex-1 rounded-xl bg-gradient-to-r from-indigo-500 to-fuchsia-500 text-white py-2.5 text-sm font-semibold shadow-md disabled:opacity-50"
+            >
+              {submitting ? "Enregistrement…" : "Enregistrer"}
             </motion.button>
           </div>
         </form>

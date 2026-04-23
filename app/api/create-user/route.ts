@@ -31,11 +31,34 @@ export async function POST(req: Request) {
     id: data.user.id,
     name,
     role,
-    classe_id: classeId ?? null,
-    teacher_id: teacherId ?? null,
+    classe_id: classeId || null,
+    teacher_id: teacherId || null,
   });
 
   if (profileError) return NextResponse.json({ error: profileError.message }, { status: 500 });
+
+  return NextResponse.json({ success: true });
+}
+
+export async function PATCH(req: Request) {
+  const { userId, name, role, classeId, teacherId } = await req.json();
+  if (!userId) return NextResponse.json({ error: "userId manquant" }, { status: 400 });
+
+  const supabaseAdmin = adminClient();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const patch: any = {};
+  if (name !== undefined) patch.name = name;
+  if (role !== undefined) patch.role = role;
+  if (classeId !== undefined) patch.classe_id = classeId || null;
+  if (teacherId !== undefined) patch.teacher_id = teacherId || null;
+
+  const { error } = await supabaseAdmin
+    .from("profiles")
+    .update(patch)
+    .eq("id", userId);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ success: true });
 }
