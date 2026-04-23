@@ -27,7 +27,7 @@ export default function StudentProfilePage({
   const { id } = use(params);
   const router = useRouter();
   const { user, ready } = useAuth();
-  const { findStudent, findClasse, coursesByClasse, assignments, gradesByStudent } = useClasses();
+  const { findStudent, findClasse, coursesByClasse, assignments, gradesByStudent, classes, updateStudent } = useClasses();
 
   useEffect(() => {
     if (ready && !user) router.replace("/login");
@@ -52,6 +52,7 @@ export default function StudentProfilePage({
   }
 
   const [openCourse, setOpenCourse] = useState<string | null>(null);
+  const [changingClasse, setChangingClasse] = useState(false);
   const classe = findClasse(student.classeId);
   const courses = classe ? coursesByClasse(classe.id) : [];
   const allGrades = gradesByStudent(student.id);
@@ -266,7 +267,17 @@ export default function StudentProfilePage({
                   year: "numeric",
                 })}
               </InfoRow>
-              <InfoRow label="Classe">{classe?.name ?? "—"}</InfoRow>
+              <InfoRow label="Classe">
+                <span>{classe?.name ?? "—"}</span>
+                {user.role === "admin" && (
+                  <button
+                    onClick={() => setChangingClasse(true)}
+                    className="ml-2 text-[10px] text-indigo-600 hover:text-indigo-800 underline"
+                  >
+                    Changer
+                  </button>
+                )}
+              </InfoRow>
             </dl>
           </div>
 
@@ -288,6 +299,20 @@ export default function StudentProfilePage({
           </div>
         </aside>
       </div>
+
+      <AnimatePresence>
+        {changingClasse && (
+          <ChangeClasseModal
+            currentClasseId={student.classeId}
+            classes={classes}
+            onClose={() => setChangingClasse(false)}
+            onSave={(classeId) => {
+              updateStudent(student.id, { classeId });
+              setChangingClasse(false);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -298,6 +323,69 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
       <dt className="text-[11px] uppercase tracking-wider text-slate-400 w-24 shrink-0">{label}</dt>
       <dd className="text-slate-800 min-w-0 break-words">{children}</dd>
     </div>
+  );
+}
+
+function ChangeClasseModal({
+  currentClasseId,
+  classes,
+  onClose,
+  onSave,
+}: {
+  currentClasseId?: string;
+  classes: { id: string; name: string; emoji: string }[];
+  onClose: () => void;
+  onSave: (classeId: string) => void;
+}) {
+  const [classeId, setClasseId] = useState(currentClasseId ?? classes[0]?.id ?? "");
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm grid place-items-center p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 20, scale: 0.96 }}
+        transition={{ duration: 0.25 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm rounded-3xl bg-white shadow-2xl p-6"
+      >
+        <div className="flex items-center gap-3 mb-5">
+          <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-indigo-500 to-fuchsia-500 grid place-items-center text-2xl shadow-md">
+            🏫
+          </div>
+          <h2 className="text-lg font-bold tracking-tight">Changer de classe</h2>
+        </div>
+        <label className="block mb-5">
+          <span className="text-xs font-medium text-slate-600 mb-1.5 block">Classe</span>
+          <select
+            value={classeId}
+            onChange={(e) => setClasseId(e.target.value)}
+            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+          >
+            {classes.map((c) => (
+              <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>
+            ))}
+          </select>
+        </label>
+        <div className="flex gap-2">
+          <button onClick={onClose} className="flex-1 rounded-xl bg-slate-100 hover:bg-slate-200 py-2.5 text-sm font-semibold">
+            Annuler
+          </button>
+          <motion.button
+            whileTap={{ scale: 0.98 }}
+            onClick={() => classeId && onSave(classeId)}
+            className="flex-1 rounded-xl bg-gradient-to-r from-indigo-500 to-fuchsia-500 text-white py-2.5 text-sm font-semibold shadow-md"
+          >
+            Enregistrer
+          </motion.button>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }
 

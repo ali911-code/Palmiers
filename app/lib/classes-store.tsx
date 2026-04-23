@@ -208,6 +208,7 @@ type StoreValue = {
   addCourse: (data: Omit<Course, "id">) => Course;
   removeCourse: (id: string) => void;
   addStudent: (data: Omit<Student, "id">) => Student;
+  updateStudent: (id: string, patch: Partial<Omit<Student, "id">>) => void;
   removeStudent: (id: string) => void;
   setGrade: (studentId: string, assignmentId: string, score: number | null) => void;
   addAnnouncement: (data: Omit<Announcement, "id" | "when">) => Announcement;
@@ -432,6 +433,21 @@ export function ClassesProvider({ children }: { children: React.ReactNode }) {
     [students]
   );
 
+  const updateStudent = useCallback((id: string, patch: Partial<Omit<Student, "id">>) => {
+    setStudents((ss) => ss.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dbPatch: any = {};
+    if (patch.classeId !== undefined) dbPatch.classe_id = patch.classeId;
+    if (patch.firstName !== undefined) dbPatch.first_name = patch.firstName;
+    if (patch.lastName !== undefined) dbPatch.last_name = patch.lastName;
+    if (patch.email !== undefined) dbPatch.email = patch.email;
+    if (patch.emoji !== undefined) dbPatch.emoji = patch.emoji;
+    if (patch.birthDate !== undefined) dbPatch.birth_date = patch.birthDate;
+    if (patch.parentName !== undefined) dbPatch.parent_name = patch.parentName;
+    if (patch.parentPhone !== undefined) dbPatch.parent_phone = patch.parentPhone;
+    supabase.from("students").update(dbPatch).eq("id", id);
+  }, []);
+
   const removeStudent = useCallback((id: string) => {
     setStudents((ss) => ss.filter((s) => s.id !== id));
     supabase.from("students").delete().eq("id", id);
@@ -594,6 +610,7 @@ export function ClassesProvider({ children }: { children: React.ReactNode }) {
     addCourse,
     removeCourse,
     addStudent,
+    updateStudent,
     removeStudent,
     setGrade,
     addAnnouncement,
