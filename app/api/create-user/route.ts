@@ -2,10 +2,19 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
 function adminClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) {
+    throw new Error(
+      "Config serveur manquante: NEXT_PUBLIC_SUPABASE_URL et/ou SUPABASE_SERVICE_ROLE_KEY absentes dans les variables d'environnement Vercel."
+    );
+  }
+  return createClient(url, serviceKey);
+}
+
+function handleServerError(e: unknown) {
+  const msg = e instanceof Error ? e.message : "Erreur serveur";
+  return NextResponse.json({ error: msg }, { status: 500 });
 }
 
 function splitName(fullName: string) {
@@ -15,6 +24,7 @@ function splitName(fullName: string) {
 }
 
 export async function POST(req: Request) {
+  try {
   const { email, password, name, role, classeId, teacherId } = await req.json();
 
   if (!email || !password || !name || !role) {
@@ -75,9 +85,11 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ success: true });
+  } catch (e) { return handleServerError(e); }
 }
 
 export async function PATCH(req: Request) {
+  try {
   const { userId, name, role, classeId, teacherId } = await req.json();
   if (!userId) return NextResponse.json({ error: "userId manquant" }, { status: 400 });
 
@@ -137,9 +149,11 @@ export async function PATCH(req: Request) {
   }
 
   return NextResponse.json({ success: true });
+  } catch (e) { return handleServerError(e); }
 }
 
 export async function DELETE(req: Request) {
+  try {
   const { userId } = await req.json();
   if (!userId) return NextResponse.json({ error: "userId manquant" }, { status: 400 });
 
@@ -152,4 +166,5 @@ export async function DELETE(req: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
   return NextResponse.json({ success: true });
+  } catch (e) { return handleServerError(e); }
 }
