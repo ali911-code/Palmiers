@@ -8,6 +8,12 @@ function adminClient() {
   );
 }
 
+function splitName(fullName: string) {
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length === 1) return { firstName: parts[0], lastName: "" };
+  return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
+}
+
 export async function POST(req: Request) {
   const { email, password, name, role, classeId, teacherId } = await req.json();
 
@@ -27,8 +33,10 @@ export async function POST(req: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   if (!data.user) return NextResponse.json({ error: "Erreur création compte" }, { status: 500 });
 
+  const userId = data.user.id;
+
   const { error: profileError } = await supabaseAdmin.from("profiles").upsert({
-    id: data.user.id,
+    id: userId,
     name,
     role,
     classe_id: classeId || null,
@@ -36,6 +44,35 @@ export async function POST(req: Request) {
   });
 
   if (profileError) return NextResponse.json({ error: profileError.message }, { status: 500 });
+
+  // Auto-créer la fiche élève dans la classe si role=student + classeId
+  if (role === "student" && classeId) {
+    const { firstName, lastName } = splitName(name);
+    await supabaseAdmin.from("students").upsert({
+      id: userId,
+      first_name: firstName,
+      last_name: lastName,
+      classe_id: classeId,
+      emoji: "🧑‍🎓",
+      birth_date: "2010-01-01",
+      parent_name: "",
+      parent_phone: "",
+      email,
+    });
+
+    // Incrémente le compteur d'élèves de la classe
+    const { data: classe } = await supabaseAdmin
+      .from("classes")
+      .select("student_count")
+      .eq("id", classeId)
+      .single();
+    if (classe) {
+      await supabaseAdmin
+        .from("classes")
+        .update({ student_count: (classe.student_count ?? 0) + 1 })
+        .eq("id", classeId);
+    }
+  }
 
   return NextResponse.json({ success: true });
 }
@@ -46,6 +83,7 @@ export async function PATCH(req: Request) {
 
   const supabaseAdmin = adminClient();
 
+  // Profile patch
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const patch: any = {};
   if (name !== undefined) patch.name = name;
@@ -60,6 +98,44 @@ export async function PATCH(req: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // Sync la fiche élève si role=student
+  if (role === "student" && classeId) {
+    const { firstName, lastName } = splitName(name ?? "");
+    // Check si une fiche existe déjà
+    const { data: existing } = await supabaseAdmin
+      .from("students")
+      .select("id, classe_id")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (existing) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const studentPatch: any = { classe_id: classeId };
+      if (name) {
+        studentPatch.first_name = firstName;
+        studentPatch.last_name = lastName;
+      }
+      await supabaseAdmin.from("students").update(studentPatch).eq("id", userId);
+    } else {
+      // Récupère l'email depuis auth
+      const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId);
+      await supabaseAdmin.from("students").insert({
+        id: userId,
+        first_name: firstName,
+        last_name: lastName,
+        classe_id: classeId,
+        emoji: "🧑‍🎓",
+        birth_date: "2010-01-01",
+        parent_name: "",
+        parent_phone: "",
+        email: authUser?.user?.email ?? "",
+      });
+    }
+  } else if (role && role !== "student") {
+    // Si le rôle change et n'est plus élève, supprimer la fiche
+    await supabaseAdmin.from("students").delete().eq("id", userId);
+  }
+
   return NextResponse.json({ success: true });
 }
 
@@ -68,6 +144,10 @@ export async function DELETE(req: Request) {
   if (!userId) return NextResponse.json({ error: "userId manquant" }, { status: 400 });
 
   const supabaseAdmin = adminClient();
+
+  // Supprime la fiche élève associée si elle existe
+  await supabaseAdmin.from("students").delete().eq("id", userId);
+
   const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
