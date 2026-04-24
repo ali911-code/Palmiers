@@ -434,7 +434,6 @@ function UserPickerModal({
   }, [role]);
 
   const filtered = profiles
-    .filter((p) => p.classe_id !== classeId) // exclude already in this class
     .filter((p) => (query ? (p.name ?? "").toLowerCase().includes(query.toLowerCase()) : true));
 
   return (
@@ -467,38 +466,50 @@ function UserPickerModal({
             <div className="text-center text-sm text-slate-500 py-8">Chargement…</div>
           ) : filtered.length === 0 ? (
             <div className="text-center text-sm text-slate-500 py-8">
-              Aucun compte {role === "student" ? "élève" : "enseignant"} disponible.
+              Aucun compte {role === "student" ? "élève" : "enseignant"} existant.
               <br />
               <span className="text-xs text-slate-400">
                 Crée d&apos;abord le compte via « Gérer les utilisateurs ».
               </span>
             </div>
           ) : (
-            filtered.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => onPicked(p.id)}
-                className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 border border-slate-200 text-left transition-colors"
-              >
-                <div className={`h-10 w-10 rounded-xl grid place-items-center text-lg shadow ${
-                  role === "student"
-                    ? "bg-gradient-to-br from-emerald-500 to-cyan-500"
-                    : "bg-gradient-to-br from-violet-500 to-purple-500"
-                } text-white`}>
-                  {role === "student" ? "🧑‍🎓" : "🎓"}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-slate-900 truncate text-sm">
-                    {p.name || "Sans nom"}
+            filtered.map((p) => {
+              const already = p.classe_id === classeId;
+              return (
+                <button
+                  key={p.id}
+                  disabled={already}
+                  onClick={() => !already && onPicked(p.id)}
+                  className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-colors ${
+                    already
+                      ? "border-slate-100 bg-slate-50 cursor-not-allowed opacity-60"
+                      : "border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  <div className={`h-10 w-10 rounded-xl grid place-items-center text-lg shadow ${
+                    role === "student"
+                      ? "bg-gradient-to-br from-emerald-500 to-cyan-500"
+                      : "bg-gradient-to-br from-violet-500 to-purple-500"
+                  } text-white`}>
+                    {role === "student" ? "🧑‍🎓" : "🎓"}
                   </div>
-                  {p.classe_id && p.classe_id !== classeId && (
-                    <div className="text-[11px] text-amber-600">
-                      Actuellement dans : {p.classe_id}
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-slate-900 truncate text-sm">
+                      {p.name || "Sans nom"}
                     </div>
-                  )}
-                </div>
-              </button>
-            ))
+                    {already ? (
+                      <div className="text-[11px] text-emerald-600">✓ Déjà dans cette classe</div>
+                    ) : p.classe_id ? (
+                      <div className="text-[11px] text-amber-600">
+                        Actuellement dans : {p.classe_id}
+                      </div>
+                    ) : (
+                      <div className="text-[11px] text-slate-400">Sans classe</div>
+                    )}
+                  </div>
+                </button>
+              );
+            })
           )}
         </div>
 
