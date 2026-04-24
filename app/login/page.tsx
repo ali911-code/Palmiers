@@ -24,6 +24,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [status, setStatus] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -47,21 +48,22 @@ export default function LoginPage() {
     if (submitting || !email.trim() || !password.trim()) return;
     setSubmitting(true);
     setError(null);
-
-    // Fail-safe: si rien ne bouge au bout de 12s on débloque le bouton
-    const failSafe = setTimeout(() => {
-      setError("Le serveur ne répond pas. Vérifie ta connexion et réessaie.");
-      setSubmitting(false);
-    }, 12000);
+    setStatus("Connexion en cours…");
 
     // Try sign in first
     const signInErr = await signIn(email.trim(), password);
     if (!signInErr) {
-      clearTimeout(failSafe);
+      setStatus("Connecté !");
       router.replace("/");
       return;
     }
-    clearTimeout(failSafe);
+
+    if (signInErr === "WAKING_UP") {
+      setError("Le serveur met du temps à démarrer (Supabase en pause). Attends 30s et réessaie.");
+      setSubmitting(false);
+      setStatus("");
+      return;
+    }
 
     // If not found → sign up
     if (
@@ -74,11 +76,7 @@ export default function LoginPage() {
         name.trim() ||
         (role === "teacher" && selectedTeacher ? selectedTeacher.name : defaultName(role));
 
-      const failSafe2 = setTimeout(() => {
-        setError("Le serveur ne répond pas. Vérifie ta connexion et réessaie.");
-        setSubmitting(false);
-      }, 15000);
-
+      setStatus("Création du compte…");
       const signUpErr = await signUp(email.trim(), password, {
         name: resolvedName,
         role,
@@ -87,16 +85,15 @@ export default function LoginPage() {
       });
 
       if (signUpErr) {
-        clearTimeout(failSafe2);
         setError(signUpErr);
         setSubmitting(false);
+        setStatus("");
         return;
       }
 
-      // Sign in after sign up
+      setStatus("Connexion après inscription…");
       const err2 = await signIn(email.trim(), password);
-      clearTimeout(failSafe2);
-      if (err2) {
+      if (err2 && err2 !== "WAKING_UP") {
         // Supabase might require email confirmation — show friendly message
         setError("Compte créé ! Vérifiez vos emails pour confirmer votre compte, puis reconnectez-vous.");
         setSubmitting(false);
@@ -276,7 +273,7 @@ export default function LoginPage() {
               {submitting ? (
                 <motion.span key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                   className="inline-flex items-center gap-2">
-                  <Spinner /> Connexion en cours…
+                  <Spinner /> {status || "Connexion en cours…"}
                 </motion.span>
               ) : (
                 <motion.span key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>

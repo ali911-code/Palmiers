@@ -97,21 +97,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    try {
-      const result = await Promise.race([
-        supabase.auth.signInWithPassword({ email, password }),
-        new Promise<{ error: { message: string } }>((resolve) =>
-          setTimeout(
-            () => resolve({ error: { message: "Serveur lent ou indisponible (Supabase en pause ?). Réessaie dans 1 min." } }),
-            15000
-          )
-        ),
-      ]);
-      if (result.error) return result.error.message;
-      return null;
-    } catch (e) {
-      return e instanceof Error ? e.message : "Erreur de connexion";
+    const TIMEOUT = 20000; // 20s par tentative
+    const MAX_TRIES = 3;
+
+    for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
+      try {
+        const result = await Promise.race([
+          supabase.auth.signInWithPassword({ email, password }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("timeout")), TIMEOUT)
+          ),
+        ]);
+        if (result.error) return result.error.message;
+        return null; // succès
+      } catch (e) {
+        const isTimeout = e instanceof Error && e.message === "timeout";
+        if (isTimeout && attempt < MAX_TRIES) {
+          // Supabase est en train de démarrer, on retente
+          await new Promise((r) => setTimeout(r, 3000));
+          continue;
+        }
+        if (isTimeout) {
+          return "WAKING_UP"; // signal spécial pour l'UI
+        }
+        return e instanceof Error ? e.message : "Erreur de connexion";
+      }
     }
+    return "Impossible de joindre le serveur. Réessaie dans 1 minute.";
   }, []);
 
   const signUp = useCallback(async (
