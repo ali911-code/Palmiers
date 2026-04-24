@@ -1,10 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth, type Role } from "../lib/auth";
 import { useClasses } from "../lib/classes-store";
+import { supabase } from "../lib/supabase";
 
 const ROLES: { value: Role; label: string; emoji: string; hint: string }[] = [
   { value: "student", label: "Élève",          emoji: "🎒",  hint: "Cours et notes" },
@@ -26,6 +27,8 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  const [serverReady, setServerReady] = useState(false);
+  const warmupDone = useRef(false);
 
   useEffect(() => {
     if (classes.length && !classes.find((c) => c.id === classeId)) {
@@ -42,6 +45,22 @@ export default function LoginPage() {
   useEffect(() => {
     if (ready && user) router.replace("/");
   }, [ready, user, router]);
+
+  // Réveille Supabase dès l'ouverture de la page
+  useEffect(() => {
+    if (warmupDone.current) return;
+    warmupDone.current = true;
+    const wake = async () => {
+      try {
+        await Promise.race([
+          supabase.from("profiles").select("id").limit(1),
+          new Promise((_, r) => setTimeout(() => r(new Error("t")), 30000)),
+        ]);
+      } catch { /* ignore */ }
+      setServerReady(true);
+    };
+    wake();
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -131,6 +150,21 @@ export default function LoginPage() {
             <p className="text-xs text-slate-500">Connectez-vous pour continuer</p>
           </div>
         </motion.div>
+
+        {/* Indicateur réveil serveur */}
+        <AnimatePresence>
+          {!serverReady && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              className="mb-4 flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-4 py-2.5 text-xs text-amber-700"
+            >
+              <Spinner />
+              Démarrage du serveur… (peut prendre 30s la première fois)
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Role picker */}
@@ -264,7 +298,7 @@ export default function LoginPage() {
 
           <motion.button
             type="submit"
-            disabled={submitting || !email.trim() || !password.trim()}
+            disabled={submitting || !email.trim() || !password.trim() || !serverReady}
             whileHover={{ scale: submitting ? 1 : 1.01 }}
             whileTap={{ scale: 0.98 }}
             className="group relative w-full overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 text-white py-3 font-semibold shadow-lg shadow-emerald-600/30 disabled:opacity-70"
