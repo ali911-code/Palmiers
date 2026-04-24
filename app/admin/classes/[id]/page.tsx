@@ -52,6 +52,7 @@ export default function AdminClasseDetailPage({
     gradesByStudent,
     addCourse,
     removeCourse,
+    refresh,
   } = useClasses();
 
   const [addingCourse, setAddingCourse] = useState(false);
@@ -64,6 +65,11 @@ export default function AdminClasseDetailPage({
     if (ready && !user) router.replace("/login");
     else if (ready && user && user.role !== "admin") router.replace("/");
   }, [ready, user, router]);
+
+  // Force refresh lors de l'arrivée sur la page (et à chaque reloadKey)
+  useEffect(() => {
+    refresh();
+  }, [refresh, reloadKey]);
 
   // Fetch all teacher profiles (for this class header)
   useEffect(() => {

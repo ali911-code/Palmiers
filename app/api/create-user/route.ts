@@ -58,10 +58,10 @@ export async function POST(req: Request) {
   // Auto-créer la fiche élève dans la classe si role=student + classeId
   if (role === "student" && classeId) {
     const { firstName, lastName } = splitName(name);
-    await supabaseAdmin.from("students").upsert({
+    const { error: studentErr } = await supabaseAdmin.from("students").upsert({
       id: userId,
       first_name: firstName,
-      last_name: lastName,
+      last_name: lastName || firstName, // évite violation NOT NULL
       classe_id: classeId,
       emoji: "🧑‍🎓",
       birth_date: "2010-01-01",
@@ -69,6 +69,12 @@ export async function POST(req: Request) {
       parent_phone: "",
       email,
     });
+    if (studentErr) {
+      return NextResponse.json(
+        { error: `Compte créé mais fiche élève échouée: ${studentErr.message}` },
+        { status: 500 }
+      );
+    }
 
     // Incrémente le compteur d'élèves de la classe
     const { data: classe } = await supabaseAdmin

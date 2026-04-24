@@ -217,6 +217,7 @@ type StoreValue = {
   addScheduleSlot: (data: Omit<ScheduleSlot, "id">) => ScheduleSlot;
   updateScheduleSlot: (id: string, patch: Partial<Omit<ScheduleSlot, "id">>) => void;
   removeScheduleSlot: (id: string) => void;
+  refresh: () => Promise<void>;
   resetAll: () => void;
 };
 
@@ -311,6 +312,18 @@ export function ClassesProvider({ children }: { children: React.ReactNode }) {
       .on("postgres_changes", { event: "*", schema: "public", table: "grades" }, async () => {
         const { data } = await supabase.from("grades").select("*");
         setGrades((data ?? []).map(dbToGrade));
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "students" }, async () => {
+        const { data } = await supabase.from("students").select("*").order("first_name");
+        setStudents((data ?? []).map(dbToStudent));
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "classes" }, async () => {
+        const { data } = await supabase.from("classes").select("*").order("created_at");
+        setClasses((data ?? []).map(dbToClasse));
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "courses" }, async () => {
+        const { data } = await supabase.from("courses").select("*").order("created_at");
+        setCourses((data ?? []).map(dbToCourse));
       })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "announcements" }, (payload) => {
         setAnnouncements((prev) => [dbToAnnouncement(payload.new), ...prev]);
@@ -572,6 +585,26 @@ export function ClassesProvider({ children }: { children: React.ReactNode }) {
     supabase.from("schedule_slots").delete().eq("id", id);
   }, []);
 
+  const refresh = useCallback(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const safe = async (q: PromiseLike<any>): Promise<{ data: any[] }> => {
+      try {
+        const r = await q;
+        return { data: r?.data ?? [] };
+      } catch {
+        return { data: [] };
+      }
+    };
+    const [{ data: cls }, { data: crs }, { data: sts }] = await Promise.all([
+      safe(supabase.from("classes").select("*").order("created_at")),
+      safe(supabase.from("courses").select("*").order("created_at")),
+      safe(supabase.from("students").select("*").order("first_name")),
+    ]);
+    setClasses((cls ?? []).map(dbToClasse));
+    setCourses((crs ?? []).map(dbToCourse));
+    setStudents((sts ?? []).map(dbToStudent));
+  }, []);
+
   const resetAll = useCallback(async () => {
     // Delete everything (no reseed — admin fills manually)
     await supabase.from("classes").delete().neq("id", "___never___");
@@ -619,6 +652,7 @@ export function ClassesProvider({ children }: { children: React.ReactNode }) {
     addScheduleSlot,
     updateScheduleSlot,
     removeScheduleSlot,
+    refresh,
     resetAll,
   };
 
