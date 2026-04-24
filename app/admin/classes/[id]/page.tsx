@@ -2,7 +2,7 @@
 
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter, notFound } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import TopBar from "../../../components/TopBar";
 import { useAuth } from "../../../lib/auth";
@@ -93,9 +93,8 @@ export default function AdminClasseDetailPage({
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
 
   const classe = findClasse(id);
-  if (ready && !classe) notFound();
 
-  if (!ready || !user || user.role !== "admin" || !classe) {
+  if (!ready || !user || user.role !== "admin") {
     return (
       <div className="flex-1 grid place-items-center">
         <motion.div
@@ -105,6 +104,30 @@ export default function AdminClasseDetailPage({
         >
           Chargement…
         </motion.div>
+      </div>
+    );
+  }
+
+  // Classe pas encore chargée (Supabase lent) → retry au lieu de 404
+  if (!classe) {
+    return (
+      <div className="flex-1 grid place-items-center text-center px-4">
+        <div className="space-y-4">
+          <div className="text-4xl">🏫</div>
+          <div className="text-slate-600 font-medium">Classe introuvable ou en cours de chargement…</div>
+          <div className="text-sm text-slate-400">ID : {id}</div>
+          <button
+            onClick={() => { reload(); refresh(); }}
+            className="mt-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"
+          >
+            Réessayer
+          </button>
+          <div className="pt-1">
+            <Link href="/admin/classes" className="text-sm text-slate-500 underline">
+              ← Retour aux classes
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }
