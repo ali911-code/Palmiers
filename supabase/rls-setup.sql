@@ -259,8 +259,20 @@ with check (
 );
 
 -- ============================================================
--- SCHEDULE_SLOTS
+-- SCHEDULE_SLOTS (créé s'il n'existe pas encore)
 -- ============================================================
+create table if not exists public.schedule_slots (
+  id           text primary key,
+  classe_id    text not null references public.classes(id) on delete cascade,
+  day_of_week  int  not null,
+  start_time   time not null,
+  end_time     time not null,
+  subject      text not null,
+  teacher      text,
+  room         text,
+  created_at   timestamptz default now()
+);
+
 alter table public.schedule_slots enable row level security;
 
 do $$
