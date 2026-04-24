@@ -13,7 +13,7 @@ set search_path = public
 as $$
   select exists (
     select 1 from public.profiles
-    where id = auth.uid() and role = 'admin'
+    where id::text = auth.uid()::text and role = 'admin'
   );
 $$;
 
@@ -41,13 +41,13 @@ using (true);
 create policy "Users insert own profile"
 on public.profiles for insert
 to authenticated
-with check (auth.uid() = id);
+with check (auth.uid()::text = id::text);
 
 -- Chacun peut modifier son propre profil
 create policy "Users update own profile"
 on public.profiles for update
 to authenticated
-using (auth.uid() = id);
+using (auth.uid()::text = id::text);
 
 -- Admin peut tout modifier / supprimer
 create policy "Admin writes all profiles"
@@ -125,7 +125,7 @@ using (true);
 create policy "Self update student"
 on public.students for update
 to authenticated
-using (auth.uid() = id);
+using (auth.uid()::text = id::text);
 
 create policy "Admin writes students"
 on public.students for all
@@ -151,9 +151,9 @@ create policy "Read grades"
 on public.grades for select
 to authenticated
 using (
-  student_id = auth.uid()
+  student_id::text = auth.uid()::text
   or public.is_admin()
-  or exists (select 1 from public.profiles where id = auth.uid() and role = 'teacher')
+  or exists (select 1 from public.profiles where id::text = auth.uid()::text and role = 'teacher')
 );
 
 create policy "Teacher/Admin writes grades"
@@ -161,11 +161,11 @@ on public.grades for all
 to authenticated
 using (
   public.is_admin()
-  or exists (select 1 from public.profiles where id = auth.uid() and role = 'teacher')
+  or exists (select 1 from public.profiles where id::text = auth.uid()::text and role = 'teacher')
 )
 with check (
   public.is_admin()
-  or exists (select 1 from public.profiles where id = auth.uid() and role = 'teacher')
+  or exists (select 1 from public.profiles where id::text = auth.uid()::text and role = 'teacher')
 );
 
 -- ============================================================
@@ -191,11 +191,11 @@ on public.assignments for all
 to authenticated
 using (
   public.is_admin()
-  or exists (select 1 from public.profiles where id = auth.uid() and role = 'teacher')
+  or exists (select 1 from public.profiles where id::text = auth.uid()::text and role = 'teacher')
 )
 with check (
   public.is_admin()
-  or exists (select 1 from public.profiles where id = auth.uid() and role = 'teacher')
+  or exists (select 1 from public.profiles where id::text = auth.uid()::text and role = 'teacher')
 );
 
 -- ============================================================
@@ -221,11 +221,11 @@ on public.announcements for all
 to authenticated
 using (
   public.is_admin()
-  or exists (select 1 from public.profiles where id = auth.uid() and role = 'teacher')
+  or exists (select 1 from public.profiles where id::text = auth.uid()::text and role = 'teacher')
 )
 with check (
   public.is_admin()
-  or exists (select 1 from public.profiles where id = auth.uid() and role = 'teacher')
+  or exists (select 1 from public.profiles where id::text = auth.uid()::text and role = 'teacher')
 );
 
 -- ============================================================
@@ -251,11 +251,11 @@ on public.stream_posts for all
 to authenticated
 using (
   public.is_admin()
-  or exists (select 1 from public.profiles where id = auth.uid() and role = 'teacher')
+  or exists (select 1 from public.profiles where id::text = auth.uid()::text and role = 'teacher')
 )
 with check (
   public.is_admin()
-  or exists (select 1 from public.profiles where id = auth.uid() and role = 'teacher')
+  or exists (select 1 from public.profiles where id::text = auth.uid()::text and role = 'teacher')
 );
 
 -- ============================================================
