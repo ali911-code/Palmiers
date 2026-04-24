@@ -104,7 +104,11 @@ export default function LoginPage() {
       });
 
       if (signUpErr) {
-        setError(signUpErr);
+        if (signUpErr === "WAKING_UP") {
+          setError("Le serveur démarre encore. Attends 30 secondes et réessaie.");
+        } else {
+          setError(signUpErr);
+        }
         setSubmitting(false);
         setStatus("");
         return;

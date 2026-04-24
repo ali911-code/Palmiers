@@ -131,27 +131,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     password: string,
     profile: { name: string; role: Role; classeId?: string; teacherId?: string }
   ) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { name: profile.name, role: profile.role },
-      },
-    });
-    if (error) return error.message;
-    if (!data.user) return "Erreur lors de la création du compte.";
+    const TIMEOUT = 25000;
+    const MAX_TRIES = 3;
 
-    // Upsert profile (trigger may have already created it)
-    const { error: profileError } = await supabase.from("profiles").upsert({
-      id: data.user.id,
-      name: profile.name,
-      role: profile.role,
-      classe_id: profile.classeId ?? null,
-      teacher_id: profile.teacherId ?? null,
-    });
-    if (profileError) return profileError.message;
+    for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
+      try {
+        const result = await Promise.race([
+          supabase.auth.signUp({
+            email,
+            password,
+            options: { data: { name: profile.name, role: profile.role } },
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("timeout")), TIMEOUT)
+          ),
+        ]);
 
-    return null;
+        if (result.error) return result.error.message;
+        if (!result.data.user) return "Erreur lors de la création du compte.";
+
+        // Upsert profile
+        const { error: profileError } = await supabase.from("profiles").upsert({
+          id: result.data.user.id,
+          name: profile.name,
+          role: profile.role,
+          classe_id: profile.classeId ?? null,
+          teacher_id: profile.teacherId ?? null,
+        });
+        if (profileError) return profileError.message;
+
+        return null; // succès
+      } catch (e) {
+        const isTimeout = e instanceof Error && e.message === "timeout";
+        if (isTimeout && attempt < MAX_TRIES) {
+          await new Promise((r) => setTimeout(r, 3000));
+          continue;
+        }
+        return "WAKING_UP";
+      }
+    }
+    return "Impossible de joindre le serveur. Réessaie dans 1 minute.";
   }, []);
 
   const signOut = useCallback(async () => {
