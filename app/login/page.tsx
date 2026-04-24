@@ -7,10 +7,17 @@ import { useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 
 
+const ROLES = [
+  { value: "student", label: "Élève",          emoji: "🎒"  },
+  { value: "teacher", label: "Enseignant",     emoji: "👩‍🏫" },
+  { value: "admin",   label: "Administrateur", emoji: "🛡️"  },
+] as const;
+
 export default function LoginPage() {
   const router = useRouter();
   const { user, ready, signIn } = useAuth();
 
+  const [role, setRole] = useState<"student"|"teacher"|"admin">("student");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -107,6 +114,37 @@ export default function LoginPage() {
         </AnimatePresence>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Sélecteur de rôle */}
+          <div>
+            <label className="text-xs font-medium text-slate-600 mb-2 block">Je suis…</label>
+            <div className="grid grid-cols-3 gap-2">
+              {ROLES.map((r) => {
+                const active = r.value === role;
+                return (
+                  <motion.button
+                    type="button"
+                    key={r.value}
+                    onClick={() => setRole(r.value)}
+                    whileTap={{ scale: 0.96 }}
+                    className={`relative rounded-2xl p-3 text-left border transition-colors ${
+                      active ? "border-indigo-500/60 bg-white" : "border-transparent bg-white/50 hover:bg-white/80"
+                    }`}
+                  >
+                    {active && (
+                      <motion.span
+                        layoutId="role-ring"
+                        className="absolute inset-0 rounded-2xl ring-2 ring-indigo-500/70"
+                        transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                      />
+                    )}
+                    <div className="text-xl">{r.emoji}</div>
+                    <div className="mt-1 text-xs font-semibold">{r.label}</div>
+                  </motion.button>
+                );
+              })}
+            </div>
+          </div>
+
           <Field label="Email" value={email} onChange={setEmail}
             type="email" autoComplete="email" placeholder="exemple@email.com" />
 
