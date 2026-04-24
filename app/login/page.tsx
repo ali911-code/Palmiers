@@ -3,25 +3,14 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useAuth, type Role } from "../lib/auth";
-import { useClasses } from "../lib/classes-store";
+import { useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 
-const ROLES: { value: Role; label: string; emoji: string; hint: string }[] = [
-  { value: "student", label: "Élève",          emoji: "🎒",  hint: "Cours et notes" },
-  { value: "teacher", label: "Enseignant",     emoji: "👩‍🏫", hint: "Gérer les classes" },
-  { value: "admin",   label: "Administrateur", emoji: "🛡️",  hint: "Gestion de l'école" },
-];
 
 export default function LoginPage() {
   const router = useRouter();
-  const { user, ready, signIn, signUp } = useAuth();
-  const { classes, teachers } = useClasses();
+  const { user, ready, signIn } = useAuth();
 
-  const [role, setRole] = useState<Role>("student");
-  const [classeId, setClasseId] = useState<string>("");
-  const [teacherId, setTeacherId] = useState<string>("");
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -29,18 +18,6 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [serverReady, setServerReady] = useState(false);
   const warmupDone = useRef(false);
-
-  useEffect(() => {
-    if (classes.length && !classes.find((c) => c.id === classeId)) {
-      setClasseId(classes[0].id);
-    }
-  }, [classes, classeId]);
-
-  useEffect(() => {
-    if (teachers.length && !teachers.find((t) => t.id === teacherId)) {
-      setTeacherId(teachers[0].id);
-    }
-  }, [teachers, teacherId]);
 
   useEffect(() => {
     if (ready && user) router.replace("/");
@@ -69,65 +46,24 @@ export default function LoginPage() {
     setError(null);
     setStatus("Connexion en cours…");
 
-    // Try sign in first
-    const signInErr = await signIn(email.trim(), password);
-    if (!signInErr) {
+    const err = await signIn(email.trim(), password);
+
+    if (!err) {
       setStatus("Connecté !");
       router.replace("/");
       return;
     }
 
-    if (signInErr === "WAKING_UP") {
-      setError("Le serveur met du temps à démarrer (Supabase en pause). Attends 30s et réessaie.");
-      setSubmitting(false);
-      setStatus("");
-      return;
+    if (err === "WAKING_UP") {
+      setError("Le serveur redémarre. Attends 30 secondes et réessaie.");
+    } else if (err.includes("Invalid") || err.includes("invalid_credentials")) {
+      setError("Email ou mot de passe incorrect. Contacte l'administrateur si tu n'as pas encore de compte.");
+    } else {
+      setError(err);
     }
 
-    // If not found → sign up
-    if (
-      signInErr.includes("Invalid login") ||
-      signInErr.includes("invalid_credentials") ||
-      signInErr.includes("Email not confirmed")
-    ) {
-      const selectedTeacher = teachers.find((t) => t.id === teacherId);
-      const resolvedName =
-        name.trim() ||
-        (role === "teacher" && selectedTeacher ? selectedTeacher.name : defaultName(role));
-
-      setStatus("Création du compte…");
-      const signUpErr = await signUp(email.trim(), password, {
-        name: resolvedName,
-        role,
-        classeId: role === "student" ? classeId : undefined,
-        teacherId: role === "teacher" ? teacherId : undefined,
-      });
-
-      if (signUpErr) {
-        if (signUpErr === "WAKING_UP") {
-          setError("Le serveur démarre encore. Attends 30 secondes et réessaie.");
-        } else {
-          setError(signUpErr);
-        }
-        setSubmitting(false);
-        setStatus("");
-        return;
-      }
-
-      setStatus("Connexion après inscription…");
-      const err2 = await signIn(email.trim(), password);
-      if (err2 && err2 !== "WAKING_UP") {
-        // Supabase might require email confirmation — show friendly message
-        setError("Compte créé ! Vérifiez vos emails pour confirmer votre compte, puis reconnectez-vous.");
-        setSubmitting(false);
-        return;
-      }
-      router.replace("/");
-      return;
-    }
-
-    setError(signInErr);
     setSubmitting(false);
+    setStatus("");
   }
 
   return (
@@ -170,118 +106,9 @@ export default function LoginPage() {
           )}
         </AnimatePresence>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Role picker */}
-          <div>
-            <label className="text-xs font-medium text-slate-600 mb-2 block">Je suis…</label>
-            <div className="grid grid-cols-3 gap-2">
-              {ROLES.map((r) => {
-                const active = r.value === role;
-                return (
-                  <motion.button
-                    type="button"
-                    key={r.value}
-                    onClick={() => setRole(r.value)}
-                    whileTap={{ scale: 0.96 }}
-                    className={`relative rounded-2xl p-3 text-left border transition-colors ${
-                      active ? "border-indigo-500/60 bg-white" : "border-transparent bg-white/50 hover:bg-white/80"
-                    }`}
-                  >
-                    {active && (
-                      <motion.span
-                        layoutId="role-ring"
-                        className="absolute inset-0 rounded-2xl ring-2 ring-indigo-500/70"
-                        transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                      />
-                    )}
-                    <div className="text-xl">{r.emoji}</div>
-                    <div className={`mt-1 font-semibold ${r.value === "admin" ? "text-[10px] sm:text-sm" : "text-sm"}`}>{r.label}</div>
-                  </motion.button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Teacher picker */}
-          <AnimatePresence initial={false}>
-            {role === "teacher" && (
-              <motion.div
-                key="teacher-picker"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.25 }}
-                className="overflow-hidden"
-              >
-                <label className="text-xs font-medium text-slate-600 mb-2 block">Je suis</label>
-                <select
-                  value={teacherId}
-                  onChange={(e) => setTeacherId(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white/80 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                >
-                  {teachers.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} — {t.classeIds.length} classe{t.classeIds.length > 1 ? "s" : ""}
-                    </option>
-                  ))}
-                </select>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Class picker for students */}
-          <AnimatePresence initial={false}>
-            {role === "student" && (
-              <motion.div
-                key="classe-picker"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.25 }}
-                className="overflow-hidden"
-              >
-                <label className="text-xs font-medium text-slate-600 mb-2 block">Ma classe</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {classes.map((c) => {
-                    const active = c.id === classeId;
-                    return (
-                      <motion.button
-                        type="button"
-                        key={c.id}
-                        onClick={() => setClasseId(c.id)}
-                        whileTap={{ scale: 0.97 }}
-                        className={`relative rounded-2xl p-3 text-left border transition-colors ${
-                          active ? "border-indigo-500/60 bg-white" : "border-transparent bg-white/50 hover:bg-white/80"
-                        }`}
-                      >
-                        {active && (
-                          <motion.span
-                            layoutId="classe-ring"
-                            className="absolute inset-0 rounded-2xl ring-2 ring-indigo-500/70"
-                            transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                          />
-                        )}
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg">{c.emoji}</span>
-                          <div>
-                            <div className="text-sm font-semibold leading-tight">{c.name}</div>
-                            <div className="text-[10px] text-slate-500">{c.studentCount} élèves</div>
-                          </div>
-                        </div>
-                      </motion.button>
-                    );
-                  })}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Name (only for new accounts) */}
-          <Field label="Nom (premier accès uniquement)" value={name} onChange={setName}
-            placeholder={defaultName(role)} autoComplete="name" />
-
+        <form onSubmit={handleSubmit} className="space-y-4">
           <Field label="Email" value={email} onChange={setEmail}
-            placeholder={defaultEmail(role)} type="email" autoComplete="email" />
+            type="email" autoComplete="email" placeholder="exemple@email.com" />
 
           <Field label="Mot de passe" value={password} onChange={setPassword}
             type="password" placeholder="••••••" autoComplete="current-password" />
@@ -323,7 +150,7 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-5 text-center text-xs text-slate-500">
-          École Les Palmiers · Premier accès = création automatique du compte.
+          École Les Palmiers · Contactez l&apos;administrateur pour obtenir vos identifiants.
         </p>
       </motion.div>
     </div>
@@ -367,10 +194,3 @@ function FloatingBlobs() {
   );
 }
 
-function defaultName(role: Role) {
-  return role === "student" ? "Amina Diallo" : role === "teacher" ? "M. Bernard" : "Mme la Directrice";
-}
-function defaultEmail(role: Role) {
-  const slug = role === "student" ? "eleve" : role === "teacher" ? "prof" : "admin";
-  return `${slug}@lespalmiers.fr`;
-}
