@@ -22,12 +22,14 @@ $$;
 -- ============================================================
 alter table public.profiles enable row level security;
 
-drop policy if exists "Users read own profile" on public.profiles;
-drop policy if exists "Users update own profile" on public.profiles;
-drop policy if exists "Users insert own profile" on public.profiles;
-drop policy if exists "Admin reads all profiles" on public.profiles;
-drop policy if exists "Admin writes all profiles" on public.profiles;
-drop policy if exists "Authenticated read profiles" on public.profiles;
+-- Drop TOUTES les policies existantes sur profiles (y compris celles créées via UI)
+do $$
+declare r record;
+begin
+  for r in (select policyname from pg_policies where schemaname='public' and tablename='profiles') loop
+    execute format('drop policy if exists %I on public.profiles', r.policyname);
+  end loop;
+end $$;
 
 -- Tout le monde connecté peut lire les profils (pour le picker admin, listes, etc.)
 create policy "Authenticated read profiles"
@@ -59,8 +61,13 @@ with check (public.is_admin());
 -- ============================================================
 alter table public.classes enable row level security;
 
-drop policy if exists "Authenticated read classes" on public.classes;
-drop policy if exists "Admin writes classes" on public.classes;
+do $$
+declare r record;
+begin
+  for r in (select policyname from pg_policies where schemaname='public' and tablename='classes') loop
+    execute format('drop policy if exists %I on public.classes', r.policyname);
+  end loop;
+end $$;
 
 create policy "Authenticated read classes"
 on public.classes for select
@@ -78,8 +85,13 @@ with check (public.is_admin());
 -- ============================================================
 alter table public.courses enable row level security;
 
-drop policy if exists "Authenticated read courses" on public.courses;
-drop policy if exists "Admin writes courses" on public.courses;
+do $$
+declare r record;
+begin
+  for r in (select policyname from pg_policies where schemaname='public' and tablename='courses') loop
+    execute format('drop policy if exists %I on public.courses', r.policyname);
+  end loop;
+end $$;
 
 create policy "Authenticated read courses"
 on public.courses for select
@@ -97,9 +109,13 @@ with check (public.is_admin());
 -- ============================================================
 alter table public.students enable row level security;
 
-drop policy if exists "Authenticated read students" on public.students;
-drop policy if exists "Admin writes students" on public.students;
-drop policy if exists "Self update student" on public.students;
+do $$
+declare r record;
+begin
+  for r in (select policyname from pg_policies where schemaname='public' and tablename='students') loop
+    execute format('drop policy if exists %I on public.students', r.policyname);
+  end loop;
+end $$;
 
 create policy "Authenticated read students"
 on public.students for select
@@ -122,8 +138,13 @@ with check (public.is_admin());
 -- ============================================================
 alter table public.grades enable row level security;
 
-drop policy if exists "Read grades" on public.grades;
-drop policy if exists "Teacher/Admin writes grades" on public.grades;
+do $$
+declare r record;
+begin
+  for r in (select policyname from pg_policies where schemaname='public' and tablename='grades') loop
+    execute format('drop policy if exists %I on public.grades', r.policyname);
+  end loop;
+end $$;
 
 -- Élève voit ses notes, prof et admin voient tout
 create policy "Read grades"
@@ -152,8 +173,13 @@ with check (
 -- ============================================================
 alter table public.assignments enable row level security;
 
-drop policy if exists "Authenticated read assignments" on public.assignments;
-drop policy if exists "Teacher/Admin writes assignments" on public.assignments;
+do $$
+declare r record;
+begin
+  for r in (select policyname from pg_policies where schemaname='public' and tablename='assignments') loop
+    execute format('drop policy if exists %I on public.assignments', r.policyname);
+  end loop;
+end $$;
 
 create policy "Authenticated read assignments"
 on public.assignments for select
@@ -177,8 +203,13 @@ with check (
 -- ============================================================
 alter table public.announcements enable row level security;
 
-drop policy if exists "Authenticated read announcements" on public.announcements;
-drop policy if exists "Teacher/Admin writes announcements" on public.announcements;
+do $$
+declare r record;
+begin
+  for r in (select policyname from pg_policies where schemaname='public' and tablename='announcements') loop
+    execute format('drop policy if exists %I on public.announcements', r.policyname);
+  end loop;
+end $$;
 
 create policy "Authenticated read announcements"
 on public.announcements for select
@@ -202,8 +233,13 @@ with check (
 -- ============================================================
 alter table public.stream_posts enable row level security;
 
-drop policy if exists "Authenticated read stream" on public.stream_posts;
-drop policy if exists "Teacher/Admin writes stream" on public.stream_posts;
+do $$
+declare r record;
+begin
+  for r in (select policyname from pg_policies where schemaname='public' and tablename='stream_posts') loop
+    execute format('drop policy if exists %I on public.stream_posts', r.policyname);
+  end loop;
+end $$;
 
 create policy "Authenticated read stream"
 on public.stream_posts for select
@@ -227,8 +263,13 @@ with check (
 -- ============================================================
 alter table public.schedule_slots enable row level security;
 
-drop policy if exists "Authenticated read schedule" on public.schedule_slots;
-drop policy if exists "Admin writes schedule" on public.schedule_slots;
+do $$
+declare r record;
+begin
+  for r in (select policyname from pg_policies where schemaname='public' and tablename='schedule_slots') loop
+    execute format('drop policy if exists %I on public.schedule_slots', r.policyname);
+  end loop;
+end $$;
 
 create policy "Authenticated read schedule"
 on public.schedule_slots for select
