@@ -202,7 +202,7 @@ type StoreValue = {
   gradesByStudent: (studentId: string) => Grade[];
   scheduleByClasse: (classeId: string) => ScheduleSlot[];
 
-  addClasse: (data: Omit<Classe, "id">) => Classe;
+  addClasse: (data: Omit<Classe, "id">) => Promise<{ classe: Classe; error: string | null }>;
   updateClasse: (id: string, patch: Partial<Omit<Classe, "id">>) => void;
   removeClasse: (id: string) => void;
   addCourse: (data: Omit<Course, "id">) => Course;
@@ -406,13 +406,18 @@ export function ClassesProvider({ children }: { children: React.ReactNode }) {
 
   /* ---- Mutations ---- */
   const addClasse = useCallback(
-    (data: Omit<Classe, "id">) => {
+    async (data: Omit<Classe, "id">): Promise<{ classe: Classe; error: string | null }> => {
       const existing = new Set(classes.map((c) => c.id));
       const id = uniqueId(slugify(data.name), existing);
       const classe: Classe = { ...data, id };
       setClasses((cs) => [...cs, classe]);
-      supabase.from("classes").insert(classeToDb(classe));
-      return classe;
+      const { error } = await supabase.from("classes").insert(classeToDb(classe));
+      if (error) {
+        // Annule l'ajout local si la DB a rejeté
+        setClasses((cs) => cs.filter((c) => c.id !== id));
+        return { classe, error: error.message };
+      }
+      return { classe, error: null };
     },
     [classes]
   );

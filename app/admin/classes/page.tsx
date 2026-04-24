@@ -192,9 +192,16 @@ export default function AdminClassesPage() {
               setCreating(false);
               setEditing(null);
             }}
-            onSubmit={(data) => {
-              if (editing) updateClasse(editing.id, data);
-              else addClasse(data);
+            onSubmit={async (data) => {
+              if (editing) {
+                updateClasse(editing.id, data);
+              } else {
+                const { error } = await addClasse(data);
+                if (error) {
+                  alert(`Erreur sauvegarde: ${error}\n\nVérifie que ton compte est bien admin dans Supabase.`);
+                  return;
+                }
+              }
               setCreating(false);
               setEditing(null);
             }}
