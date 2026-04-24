@@ -65,15 +65,23 @@ export default function AdminClasseDetailPage({
     else if (ready && user && user.role !== "admin") router.replace("/");
   }, [ready, user, router]);
 
-  // Fetch all teacher profiles (for this class and for picker)
+  // Fetch all teacher profiles (for this class header)
   useEffect(() => {
+    let cancelled = false;
     (async () => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("id, name, role, classe_id")
-        .eq("role", "teacher");
-      setTeacherProfiles((data ?? []) as ProfileRow[]);
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("id, name, role, classe_id")
+          .eq("role", "teacher");
+        if (cancelled) return;
+        if (error) console.error("teachers fetch error:", error);
+        setTeacherProfiles((data ?? []) as ProfileRow[]);
+      } catch (e) {
+        console.error("teachers fetch threw:", e);
+      }
     })();
+    return () => { cancelled = true; };
   }, [reloadKey]);
 
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
@@ -397,14 +405,32 @@ function UserPickerModal({
   const [query, setQuery] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
+    const timeout = setTimeout(() => {
+      if (!cancelled) setLoading(false);
+    }, 5000);
     (async () => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("id, name, role, classe_id")
-        .eq("role", role);
-      setProfiles((data ?? []) as ProfileRow[]);
-      setLoading(false);
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("id, name, role, classe_id")
+          .eq("role", role);
+        if (cancelled) return;
+        if (error) {
+          console.error("profiles fetch error:", error);
+        }
+        setProfiles((data ?? []) as ProfileRow[]);
+      } catch (e) {
+        console.error("profiles fetch threw:", e);
+      } finally {
+        clearTimeout(timeout);
+        if (!cancelled) setLoading(false);
+      }
     })();
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
   }, [role]);
 
   const filtered = profiles
